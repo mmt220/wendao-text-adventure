@@ -1,20 +1,45 @@
 /* ============================================================
- * 《问道长生》剧情数据
+ * 《问道长生》剧情数据 v2
  * 节点结构：
  *   id:      唯一标识
  *   chapter: 章节名（可选）
  *   title:   场景标题
- *   text:    段落数组（文学化散文）
- *   onEnter: (s) => {} 进入节点时的钩子（可改状态 / 跳转用 return）
- *   choices: [{
- *     text: 选项文案（括号内注明代价与收获）
- *     show: (s) => bool   是否出现
- *     can:  (s) => bool   是否可选（不满足则置灰）
- *     fx:   (s) => void   效果
- *     next: 'id' | (s) => 'id'
- *   }]
- *   ending: { title, rank } 若为结局节点
+ *   text:    段落数组（可为函数，运行时求值）
+ *   onEnter: (s) => {} 进入节点时的钩子
+ *   choices: [{ text, show(s), can(s), fx(s), next: 'id'|fn(s), restart }]
+ *   ending: '仙'|'缘'|... 若为结局节点
+ * 辅助：
+ *   like(s, npc, n) 调整好感度
  * ============================================================ */
+
+/* ---------- NPC 好感度 ---------- */
+const NPCS = {
+  duBiWeng: { name: '独臂翁',   desc: '黑风峡的独臂老散修，来历成谜' },
+  yunShu:   { name: '云姝',     desc: '青云宗内门师姐，清冷如月' },
+  qingLing: { name: '青翎',     desc: '秘境中救下的碧鳞小蛇，灵性渐开' },
+  laoYu:    { name: '鬼市老妪', desc: '西荒鬼市的引荐人，善恶难辨' },
+  daoLv:    { name: '道侣',     desc: '红尘之中，始终站在你身侧的人' }
+};
+
+function like(s, npc, n) {
+  if (!s.aff) s.aff = {};
+  s.aff[npc] = Math.max(-50, Math.min(100, (s.aff[npc] || 0) + n));
+}
+
+const AFF_LEVELS = [[80, '生死之交'], [60, '挚友'], [40, '熟识'], [20, '相识'], [-999, '陌路']];
+function affLevel(v) {
+  v = v || 0;
+  for (const [min, name] of AFF_LEVELS) if (v >= min) return name;
+  return '陌路';
+}
+
+/* ---------- 境界突破成功率 ---------- */
+function breakthroughChance(s, base) {
+  let c = base + s.xinjing / 250 + s.xiuwei / 400;
+  if (s.flags.root === '天灵根') c += 0.12;
+  if (s.flags.root === '杂灵根') c -= 0.06;
+  return Math.min(0.95, c);
+}
 
 const STORY = {
 
@@ -23,12 +48,25 @@ const STORY = {
   start: {
     chapter: '序章',
     title: '山神庙的雪夜',
+    onEnter: s => {
+      // 轮回印记：前世成就加持今生
+      let bonus = 0;
+      try {
+        const meta = JSON.parse(localStorage.getItem('wendao_meta') || '{}');
+        bonus = Object.keys(meta.endings || {}).length;
+      } catch (e) {}
+      if (bonus > 0) {
+        s.flags.yinji = bonus;
+        s.xiuwei += bonus * 3;
+        s.xinjing = Math.min(100, s.xinjing + bonus * 2);
+      }
+    },
     text: [
       '大荒历三千七百二十一年，冬。青州，青牛村。',
       '你爹娘死得早，给村里张财主放了十二年牛。这夜大雪封山，你躲进村口破败的山神庙，怀里揣着半个冻硬的馍。',
       '半夜，供桌上泥塑的山神忽然睁开了眼。',
       '"小娃娃，莫怕。"泥像开口，声音像远处的钟，"老道青阳子，渡劫不成，只剩这一缕残魂。坐化之前，想问你三个问题——你答什么，老道便给你留什么。"',
-      '庙外的雪，忽然停了。'
+      s => s.flags.yinji ? '冥冥之中，你带着 ' + s.flags.yinji + ' 道轮回印记转世而来。前尘旧事如烟，唯有道心上的刻痕，岁岁不灭。' : '庙外的雪，忽然停了。'
     ],
     choices: [
       {
@@ -52,25 +90,37 @@ const STORY = {
   root: {
     chapter: '序章',
     title: '灵根',
+    onEnter: s => {
+      // 天命随机：灵根不可自选
+      if (!s.flags.root) {
+        const roll = Math.random();
+        if (roll < 0.18)      { s.flags.root = '天灵根'; s.xiuwei += 12; }
+        else if (roll < 0.45) { s.flags.root = '雷灵根'; s.xiuwei += 7; s.xinjing += 4; s.flags.lei = true; }
+        else                  { s.flags.root = '杂灵根'; s.xiuwei += 2; s.xinjing += 10; s.flags.za = true; }
+      }
+    },
     text: [
       '青阳子残魂一指点在你眉心，一缕灵气顺经脉游走周天，最后沉入丹田。',
       '"唔……"老道的虚影淡了几分，"是块什么料，就看这一遭了。"',
-      '灵气在你体内打了个转——你的灵根，是——'
+      '灵气在你体内横冲直撞，忽然某一刻安静下来，沉入气海——',
+      s => s.flags.root === '天灵根' ? '一道纯青灵光冲天而起！单属性纯灵根，万中无一的天灵根！老道的虚影都晃了三晃："好，好，好啊。"'
+        : s.flags.root === '雷灵根' ? '你的指尖窜起一簇细小的紫电，噼啪作响。变异雷灵根——攻伐无双，可雷性暴烈，心魔也比常人重三分。'
+        : '灵气散了又聚，聚了又散，五色混杂，不成章法。五行杂灵根。修仙界管这叫——废灵根。老道沉默了很久："灵根差，不代表道差。"'
     ],
     choices: [
       {
-        text: '天灵根 · 单属性纯灵根，万中无一（修为+12）',
-        fx: s => { s.flags.root = '天灵根'; s.xiuwei += 12; },
+        text: '立誓：大道朝天，我心为刃（心境+5）',
+        fx: s => { s.xinjing += 5; },
         next: 'legacy'
       },
       {
-        text: '变异雷灵根 · 攻伐无双，心魔亦重（修为+7，心境+4）',
-        fx: s => { s.flags.root = '雷灵根'; s.xiuwei += 7; s.xinjing += 4; s.flags.lei = true; },
+        text: '立誓：宁可尸骨无存，也要问鼎长生（修为+5）',
+        fx: s => { s.xiuwei += 5; },
         next: 'legacy'
       },
       {
-        text: '五行杂灵根 · 驳杂不纯，被称"废灵根"（修为+2，心境+10）',
-        fx: s => { s.flags.root = '杂灵根'; s.xiuwei += 2; s.xinjing += 10; s.flags.za = true; },
+        text: '立誓：仙道漫漫长，初心不可忘（心境+3，善缘+1）',
+        fx: s => { s.xinjing += 3; s.flags.karma = (s.flags.karma || 0) + 1; },
         next: 'legacy'
       }
     ]
@@ -112,8 +162,8 @@ const STORY = {
         next: 'rogue_early'
       },
       {
-        text: '西荒鬼市 · 富贵险中求（修为+8，心境−8）',
-        fx: s => { s.flags.path = '鬼市'; s.xiuwei += 8; s.xinjing -= 8; s.flags.devil_pull = 1; },
+        text: '西荒鬼市 · 富贵险中求（修为+8，心境−8，老妪好感+5）',
+        fx: s => { s.flags.path = '鬼市'; s.xiuwei += 8; s.xinjing -= 8; s.flags.devil_pull = 1; like(s, 'laoYu', 5); },
         next: 'devil_early'
       }
     ]
@@ -142,7 +192,26 @@ const STORY = {
         text: '安守灵田，细水长流（心境+8，修为+4，岁月+4）',
         fx: s => { s.xinjing += 8; s.xiuwei += 4; s.age += 4; s.shouyuan -= 4; },
         next: 'qi_peak'
+      },
+      {
+        text: '与云姝师姐一同巡山历练（岁月+3，好感度+）',
+        fx: s => { s.age += 3; s.shouyuan -= 3; like(s, 'yunShu', 18); s.xiuwei += 5; s.flags.metYunShu = true; },
+        next: 'sect_yunshu'
       }
+    ]
+  },
+
+  sect_yunshu: {
+    chapter: '第一章 · 炼气',
+    title: '月下论剑',
+    text: [
+      '云姝是内门最出挑的师姐，剑法凌厉，为人清冷，外门弟子见她都绕道走。那日巡山遇雨，你们躲进同一座山亭。',
+      '她忽然问："你灵根驳杂，凭什么修仙？"',
+      '你想了想，答："凭我不服。"',
+      '她愣了一下，忽然笑了。那是你第一次见她笑，像冰湖裂开一道缝，露出底下的春水。雨停时，她把自己的剑穗解下来系在你的铁剑上："大比之上，别给我丢人。"'
+    ],
+    choices: [
+      { text: '收好剑穗，继续修行（岁月+2，心境+6）', fx: s => { s.age += 2; s.shouyuan -= 2; s.xinjing += 6; like(s, 'yunShu', 8); }, next: 'qi_peak' }
     ]
   },
 
@@ -156,18 +225,18 @@ const STORY = {
     ],
     choices: [
       {
-        text: '采下紫芝（修为+15）',
+        text: '采下紫芝（修为+15，因果−1）',
         fx: s => { s.xiuwei += 15; s.flags.karma = (s.flags.karma || 0) - 1; },
         next: 'qi_peak'
       },
       {
-        text: '留下紫芝，为蛇疗伤（心境+12，得善缘）',
-        fx: s => { s.xinjing += 12; s.flags.karma = (s.flags.karma || 0) + 1; s.flags.she = true; },
+        text: '留下紫芝，为蛇疗伤（心境+12，善缘+1，青翎好感+25）',
+        fx: s => { s.xinjing += 12; s.flags.karma = (s.flags.karma || 0) + 1; s.flags.qingLing = true; like(s, 'qingLing', 25); },
         next: 'qi_peak'
       },
       {
-        text: '采一半，留一半（修为+7，心境+4）',
-        fx: s => { s.xiuwei += 7; s.xinjing += 4; },
+        text: '采一半，留一半（修为+7，心境+4，青翎好感+5）',
+        fx: s => { s.xiuwei += 7; s.xinjing += 4; like(s, 'qingLing', 5); },
         next: 'qi_peak'
       }
     ]
@@ -254,8 +323,8 @@ const STORY = {
     ],
     choices: [
       {
-        text: '收下传承，记此人情（修为+10，心境+8）',
-        fx: s => { s.xiuwei += 10; s.xinjing += 8; s.flags.karma = (s.flags.karma || 0) + 1; s.flags.map = true; },
+        text: '收下传承，记此人情（修为+10，心境+8，独臂翁好感+25）',
+        fx: s => { s.xiuwei += 10; s.xinjing += 8; s.flags.karma = (s.flags.karma || 0) + 1; s.flags.map = true; like(s, 'duBiWeng', 25); },
         next: 'qi_peak'
       }
     ]
@@ -271,8 +340,8 @@ const STORY = {
     ],
     choices: [
       {
-        text: '不管，押到便是（修为+10，心境−6）',
-        fx: s => { s.xiuwei += 10; s.xinjing -= 6; s.flags.devil_pull = (s.flags.devil_pull || 0) + 1; },
+        text: '不管，押到便是（修为+10，心境−6，老妪好感+10）',
+        fx: s => { s.xiuwei += 10; s.xinjing -= 6; like(s, 'laoYu', 10); s.flags.devil_pull = (s.flags.devil_pull || 0) + 1; },
         next: 'coffin'
       },
       {
@@ -309,30 +378,77 @@ const STORY = {
     ],
     choices: [
       {
-        text: '放她走，烧了棺材（心境+12，鬼市通缉）',
-        fx: s => { s.xinjing += 12; s.flags.karma = (s.flags.karma || 0) + 2; s.flags.saved_girl = true; s.flags.devil_pull = Math.max(0, (s.flags.devil_pull || 0) - 1); },
+        text: '放她走，烧了棺材（心境+12，善缘+1，老妪好感−20）',
+        fx: s => { s.xinjing += 12; s.flags.karma = (s.flags.karma || 0) + 2; s.flags.saved_girl = true; like(s, 'laoYu', -20); s.flags.devil_pull = Math.max(0, (s.flags.devil_pull || 0) - 1); },
         next: 'qi_peak'
       },
       {
-        text: '押去阴煞谷，但暗中记下路线，日后报官（修为+8，心境−6）',
-        fx: s => { s.xiuwei += 8; s.xinjing -= 6; s.flags.devil_pull = (s.flags.devil_pull || 0) + 1; },
+        text: '押去阴煞谷，但暗中记下路线，日后报官（修为+8，心境−6，老妪好感+10）',
+        fx: s => { s.xiuwei += 8; s.xinjing -= 6; like(s, 'laoYu', 10); s.flags.devil_pull = (s.flags.devil_pull || 0) + 1; },
         next: 'qi_peak'
       }
     ]
   },
+
+  /* ---------------- 筑基（含失败机制） ---------------- */
 
   qi_peak: {
     chapter: '第一章 · 炼气',
     title: '炼气圆满',
     text: [
       '多年打磨，你的修为终于抵达炼气十三层圆满。灵气在丹田里积成一片小湖，湖心隐隐有光。',
-      '下一步，是筑基。筑基丹、闭关地、护法之人，缺一不可。散修与宗门弟子，各有各的难处，但难关是一样的——十炼气，三筑基。剩下七个，死在这道坎上。'
+      '下一步，是筑基。筑基丹、闭关地、护法之人，缺一不可。十炼气，三筑基——剩下七个，死在这道坎上。',
+      s => '老修行们都说：筑基如赌命。你这一局，胜算约莫 ' + Math.round(breakthroughChance(s, 0.45) * 100) + ' 成。'
     ],
     choices: [
       {
-        text: '闭关，冲击筑基',
-        fx: s => { s.realm = '筑基'; s.shouyuan += 100; },
-        next: s => (s.xinjing >= 30) ? 'foundation_ok' : 'foundation_devil'
+        text: '闭关，冲击筑基（成败在天）',
+        fx: s => { s.flags.zhujiTries = (s.flags.zhujiTries || 0) + 1; },
+        next: s => {
+          const c = breakthroughChance(s, 0.45);
+          if (Math.random() < c) {
+            s.realm = '筑基'; s.shouyuan += 100;
+            return s.xinjing >= 30 ? 'foundation_ok' : 'foundation_devil';
+          }
+          s.xiuwei = Math.max(0, s.xiuwei - 15); s.shouyuan -= 2;
+          return 'foundation_fail';
+        }
+      }
+    ]
+  },
+
+  foundation_fail: {
+    chapter: '第二章 · 筑基',
+    title: '走火入魔',
+    text: [
+      '闭关到第四十日，异变陡生。',
+      '丹田气湖翻涌如沸，灵气不受控制地四处冲撞。你喷出一口黑血，硬生生从鬼门关前把自己拽了回来——筑基，失败了。',
+      '经脉里像有烧红的铁丝在乱窜。但你还活着，道基未碎，就还有机会。'
+    ],
+    choices: [
+      {
+        text: '不服，休整后再冲一次（修为−15已扣，寿元−2）',
+        fx: s => {},
+        next: 'qi_peak'
+      },
+      {
+        text: '闭关调养三年，稳住道基再试（寿元−3，心境+6）',
+        fx: s => { s.age += 3; s.shouyuan -= 3; s.xinjing += 6; },
+        next: 'qi_peak'
+      },
+      {
+        text: '服下青阳子留下的玉佩之力护住心神，强行再冲（寿元−5，本次成功率大增）',
+        can: s => !s.flags.jadeUsed && s.flags.asked,
+        fx: s => { s.flags.jadeUsed = true; s.flags.jadeBoost = true; s.shouyuan -= 5; },
+        next: s => {
+          const c = Math.min(0.95, breakthroughChance(s, 0.45) + 0.35);
+          if (Math.random() < c) {
+            s.realm = '筑基'; s.shouyuan += 100;
+            return s.xinjing >= 30 ? 'foundation_ok' : 'foundation_devil';
+          }
+          s.xiuwei = Math.max(0, s.xiuwei - 15); s.shouyuan -= 2;
+          return 'foundation_fail';
+        }
       }
     ]
   },
@@ -341,10 +457,11 @@ const STORY = {
     chapter: '第二章 · 筑基',
     title: '道基初成',
     text: [
-      '四十九日闭关。第四十九天的黎明，丹田气湖轰然塌陷、凝实，化作一方青色道基。',
+      s => s.flags.zhujiTries > 1 ? '失败了多少次，只有丹田的伤痕记得。这一回，气湖轰然塌陷、凝实，化作一方青色道基——筑基，成了！' : '四十九日闭关。第四十九天的黎明，丹田气湖轰然塌陷、凝实，化作一方青色道基。',
       '筑基成。寿元添一百二十岁，五感通明，可御剑百里。你推开洞府石门的那一刻，山风扑面，天地都不一样了。',
-      s => s.flags.path === '宗门' ? '宗门执事亲自来贺，内门名册上添了你的名字。' : s.flags.path === '散修' ? '独臂翁听闻消息，托人送来一坛灵酒。' : '鬼市老妪笑了笑："没死？那以后做更大的买卖。"'
-    ],
+      s => s.flags.path === '宗门' ? '宗门执事亲自来贺，内门名册上添了你的名字。' : s.flags.path === '散修' ? '独臂翁听闻消息，托人送来一坛灵酒。' : '鬼市老妪笑了笑："没死？那以后做更大的买卖。"',
+      s => (s.aff.duBiWeng || 0) >= 40 ? '酒坛底下压着一张字条：「筑基只是开始。三年后黑风峡，有一桩大机缘，老朽给你留着。」' : ''
+    ].filter(Boolean),
     choices: [
       { text: '筑基之后，路在脚下（岁月+2）', fx: s => { s.age += 2; s.shouyuan -= 2; }, next: 'foundation_road' }
     ]
@@ -416,6 +533,12 @@ const STORY = {
         next: 'core_forming'
       },
       {
+        text: '请独臂翁出面调停（独臂翁好感≥40，心境+8，善缘+1）',
+        show: s => (s.aff.duBiWeng || 0) >= 40,
+        fx: s => { s.xinjing += 8; s.flags.karma = (s.flags.karma || 0) + 1; s.flags.grudge_done = true; like(s, 'duBiWeng', 10); },
+        next: 'core_forming'
+      },
+      {
         text: '忍一时风平浪静（心境−8，修为+4）',
         fx: s => { s.xinjing -= 8; s.xiuwei += 4; },
         next: 'core_forming'
@@ -428,6 +551,8 @@ const STORY = {
     ]
   },
 
+  /* ---------------- 金丹（含失败机制） ---------------- */
+
   core_forming: {
     chapter: '第三章 · 金丹',
     title: '结丹',
@@ -438,15 +563,19 @@ const STORY = {
     ],
     choices: [
       {
-        text: '顺其自然，能结几品是几品（修为+20）',
+        text: '顺其自然，水磨功夫，稳稳结丹（修为+20）',
         fx: s => { s.xiuwei += 20; },
         next: 'core_done'
       },
       {
-        text: '强行冲上品金丹，风险自担（修为+40，心境−10，寿元−5）',
+        text: '强行冲上品金丹，风险自担（成功率约六成，失败则走火入魔）',
         can: s => s.xinjing >= 35,
-        fx: s => { s.xiuwei += 40; s.xinjing -= 10; s.shouyuan -= 5; },
-        next: 'core_done'
+        fx: s => {},
+        next: s => {
+          if (Math.random() < 0.6) { s.xiuwei += 40; s.xinjing -= 10; s.shouyuan -= 5; return 'core_done'; }
+          s.xiuwei = Math.max(0, s.xiuwei - 25); s.xinjing -= 5; s.shouyuan -= 3;
+          return 'core_fail';
+        }
       },
       {
         text: '碎丹重修，不留瑕疵（心境+10，岁月+5，寿元−5）',
@@ -457,15 +586,41 @@ const STORY = {
     ]
   },
 
+  core_fail: {
+    chapter: '第三章 · 金丹',
+    title: '丹碎',
+    text: [
+      '丹火暴走。',
+      '眼看金丹将要凝成，一股浊气忽然从气海深处窜起，丹胚"咔"的一声裂开细纹，散了。',
+      '你七窍渗血，瘫在闭关地里躺了整整十天。强行冲关的代价，比想象中更重。'
+    ],
+    choices: [
+      {
+        text: '养好伤，再结一次（心境+4，寿元−2）',
+        fx: s => { s.shouyuan -= 2; s.xinjing += 4; },
+        next: 'core_forming'
+      },
+      {
+        text: '怕了。自此稳扎稳打，不再冒险（心境+8，修为+10）',
+        fx: s => { s.xinjing += 8; s.xiuwei += 10; },
+        next: 'core_done'
+      }
+    ]
+  },
+
   core_done: {
     chapter: '第三章 · 金丹',
     title: '金丹真人',
-    onEnter: s => { s.realm = '金丹'; s.shouyuan += 200; },
+    onEnter: s => {
+      s.realm = '金丹'; s.shouyuan += 200;
+      if (s.flags.qingLing) like(s, 'qingLing', 20);
+    },
     text: [
       '丹田里，一枚金丹缓缓旋转，光华内蕴。金丹真人，放在任何一国都是能开宗立派的人物。',
       '你的名号开始传开。有人称你"真人"，有人来投效，有人重金求你出手，也有人开始算计你。',
+      s => s.flags.qingLing ? '袖中一沉。青翎这些年吞了你不少丹药碎屑，如今已粗如儿臂，鳞片碧得发亮。它把脑袋搁在你腕上，金瞳半阖——这小家伙，快化形了。' : '',
       '金丹之后，修的不只是法，还有"局"。'
-    ],
+    ].filter(Boolean),
     choices: [
       { text: '开府立派，收徒传道（心境+10，岁月+8，寿元−8）', fx: s => { s.xinjing += 10; s.age += 8; s.shouyuan -= 8; s.flags.sect_master = true; }, next: 'dao_heart' },
       { text: '云游四方，寻上古遗府（修为+25，岁月+6，寿元−6）', fx: s => { s.xiuwei += 25; s.age += 6; s.shouyuan -= 6; }, next: 'dao_heart' },
@@ -478,14 +633,23 @@ const STORY = {
     title: '问道于情',
     text: [
       '这一夜你喝了酒，想起的人很多：冻死的爹娘、散道的老道、峡谷里的独臂翁、棺材里的少女。',
-      '还有一个人——' + '这些年来始终站在你身侧的人。也许是同门的师姐，也许是鬼市上递给你一碗热汤的老妪的孙女，也许只是山下茶棚里替你收过尸的凡人姑娘。',
+      s => (s.aff.yunShu || 0) >= 60 ? '还有一个人——云姝。这些年她始终站在你身侧，你的铁剑上还系着她当年解下的剑穗。' :
+           s.flags.path === '鬼市' ? '还有一个人——鬼市的老妪。她看你的时候，总像在看一件还没定价的货，可这些年也只有她护过你。' :
+           '还有一个人——这些年来始终站在你身侧的人。也许是同门的师姐，也许是山下茶棚里替你收过尸的凡人姑娘。',
       '金丹修士寿五百，凡人不过百年。修仙界有句话：问世间情为何物，直教生死相许——然后双双道途尽毁。',
       '你握着酒杯，直到天亮。'
     ],
     choices: [
       {
-        text: '结为道侣，不负此情（心境+15，因果+1，"情"之牵绊）',
-        fx: s => { s.xinjing += 15; s.flags.karma = (s.flags.karma || 0) + 1; s.flags.love = '道侣'; },
+        text: '结为道侣，不负此情（心境+15，因果+1，道侣好感+45）',
+        show: s => (s.aff.yunShu || 0) < 60 && s.flags.path !== '鬼市',
+        fx: s => { s.xinjing += 15; s.flags.karma = (s.flags.karma || 0) + 1; s.flags.love = '道侣'; like(s, 'daoLv', 45); },
+        next: 'great_war'
+      },
+      {
+        text: '与云姝结为道侣（云姝好感≥60，心境+15，因果+1）',
+        show: s => (s.aff.yunShu || 0) >= 60,
+        fx: s => { s.xinjing += 15; s.flags.karma = (s.flags.karma || 0) + 1; s.flags.love = '道侣'; like(s, 'yunShu', 15); like(s, 'daoLv', 60); },
         next: 'great_war'
       },
       {
@@ -495,7 +659,7 @@ const STORY = {
       },
       {
         text: '大道无情，斩断红尘（修为+20，心境−15）',
-        fx: s => { s.xiuwei += 20; s.xinjing -= 15; s.flags.love = '斩'; s.flags.devil_pull = (s.flags.devil_pull || 0) + 1; },
+        fx: s => { s.xiuwei += 20; s.xinjing -= 15; s.flags.love = '斩'; s.flags.devil_pull = (s.flags.devil_pull || 0) + 1; like(s, 'daoLv', -30); like(s, 'yunShu', -30); },
         next: 'great_war'
       }
     ]
@@ -517,7 +681,7 @@ const STORY = {
       },
       {
         text: '镇守后方，救伤护民（心境+15，岁月+4，寿元−4）',
-        fx: s => { s.xinjing += 15; s.age += 4; s.shouyuan -= 4; s.flags.karma = (s.flags.karma || 0) + 1; },
+        fx: s => { s.xinjing += 15; s.age += 4; s.shouyuan -= 4; s.flags.karma = (s.flags.karma || 0) + 1; if (s.flags.love === '道侣') like(s, 'daoLv', 10); },
         next: 'war_after'
       },
       {
@@ -558,6 +722,7 @@ const STORY = {
   nascent_done: {
     chapter: '第四章 · 元婴',
     title: '元婴老祖',
+    onEnter: s => { if (s.flags.qingLing) like(s, 'qingLing', 25); },
     text: [
       '元婴成。紫府之中，一个眉眼与你一般无二的小人盘膝而坐，呼吸之间灵气如潮。',
       '元婴老祖，寿八百，一怒可倾一城。你的名字从此写进了修行界的史册，小辈们谈起你，要称一声"老祖"。',
@@ -585,7 +750,7 @@ const STORY = {
     choices: [
       {
         text: '不忘。爹娘的馍、老道的功法、她/他的汤，一样都不许忘。（心境+20，修为+30）',
-        fx: s => { s.xinjing += 20; s.xiuwei += 30; s.flags.remember = true; },
+        fx: s => { s.xinjing += 20; s.xiuwei += 30; s.flags.remember = true; like(s, 'daoLv', 10); if (s.flags.qingLing) like(s, 'qingLing', 10); },
         next: 'tribulation'
       },
       {
@@ -605,22 +770,30 @@ const STORY = {
   tribulation: {
     chapter: '终章 · 渡劫',
     title: '九九天劫',
+    onEnter: s => {
+      // 青翎护主：生死之交且未入魔，可获得一次挡劫
+      if ((s.aff.qingLing || 0) >= 80 && !s.flags.devil && !s.flags.qingLingUsed) {
+        s.flags.qingLingUsed = true;
+        s.flags.qingLingShield = true;
+      }
+    },
     text: [
       '化神圆满的那一日，天色变了。',
       '九重雷云在北海上空聚成漩涡，紫黑色的雷龙在云里游动，锁定的是你。整个修行界的大能都远远看着——有人盼你死，有人盼你成。',
       s => s.flags.devil ? '你周身黑气缭绕，魔道功法尽数展开。雷云之中，隐隐传来天道的怒意。' : '你周身清气流转，一甲子修行化作一道光柱，直插云霄。',
-      '第一道天雷，落下来了。'
+      s => s.flags.qingLingShield ? '雷光将落未落之际，袖中一道碧影窜出——是青翎。它盘在你肩头，仰首向天，蛇瞳中金芒大盛。它要与你同渡此劫。' : '第一道天雷，落下来了。'
     ],
     choices: [
       {
         text: '迎上去。',
         next: s => {
           if (s.flags.devil) return 'end_devil';
+          if (s.flags.qingLingShield && s.xinjing <= 0) return 'end_serpent';
+          if (s.flags.qingLingShield && s.shouyuan <= 0) return 'end_serpent';
           if (s.shouyuan <= 0) return 'end_shouyuan';
           if (s.xinjing <= 0) return 'end_heartdevil';
           if (s.flags.remember && (s.flags.karma || 0) >= 2 && s.xinjing >= 55) return 'end_ascend';
           if (s.flags.remember && s.flags.love === '道侣') return 'end_pair';
-          if (s.xiuwei >= 300 && s.xinjing >= 40) return 'end_earthly';
           return 'end_earthly';
         }
       }
@@ -653,6 +826,20 @@ const STORY = {
       '你接住那缕心念，也接住了最后九道雷。天门为你而开，但你摇了摇头。',
       '"我不上去了。"你说，"人间还有个人等我回去吃饭。"',
       '你散去半数修为，自封"散仙"，落回人间。史书上写你渡劫失败。只有她知道，你是天地间最自在的仙人。'
+    ],
+    choices: [ { text: '再入轮回，重来一次', restart: true } ]
+  },
+
+  end_serpent: {
+    chapter: '终章 · 渡劫',
+    title: '同渡',
+    ending: '情',
+    text: [
+      '第七十九道天雷落下时，你的道心先一步崩了。',
+      '眼看心魔要占据躯体，一道碧影逆着雷光冲了上去——青翎以百年蛇身，硬生生替你吞下了那道雷。雷光顺着它的鳞甲炸开，焦糊味弥漫了整片海面。',
+      '"不——！"你嘶吼着接住它坠落的身体。天门在头顶缓缓关闭，你却笑了，笑出了眼泪。',
+      '你散尽化神修为，引动残存天雷灌入它体内，为它重铸心脉。蛇躯寸寸焦黑，又寸寸生出新鳞——最后一道金纹亮起时，它睁开了眼。',
+      '史书上没有这一笔。但在北海之滨，有一位不成仙的修士，和一条不肯走的蛇，看了一万年的潮起潮落。'
     ],
     choices: [ { text: '再入轮回，重来一次', restart: true } ]
   },
