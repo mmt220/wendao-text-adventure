@@ -1,9 +1,10 @@
 /* ============================================================
- * 《问道长生》引擎
- * 状态 / 渲染 / 存档 / 水墨环境动画
+ * 《问道长生》引擎 v2
+ * 状态 / 渲染 / 存档 / 奇遇 / 好感度 / 轮回图鉴 / 水墨动画
  * ============================================================ */
 
-const SAVE_KEY = 'wendao_save_v1';
+const SAVE_KEY = 'wendao_save_v2';
+const META_KEY = 'wendao_meta';
 
 function freshState() {
   return {
@@ -14,7 +15,9 @@ function freshState() {
     age: 16,
     realm: '炼气',
     flags: {},
-    log: []
+    aff: {},
+    log: [],
+    eventUsed: []
   };
 }
 
@@ -33,6 +36,21 @@ function load() {
 }
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} }
 
+/* ---------- 轮回图鉴（跨轮回元数据） ---------- */
+function getMeta() {
+  try { return Object.assign({ endings: {}, runs: 0 }, JSON.parse(localStorage.getItem(META_KEY) || '{}')); }
+  catch (e) { return { endings: {}, runs: 0 }; }
+}
+function recordEnding(rank) {
+  try {
+    const meta = getMeta();
+    meta.endings[rank] = (meta.endings[rank] || 0) + 1;
+    meta.runs += 1;
+    localStorage.setItem(META_KEY, JSON.stringify(meta));
+  } catch (e) {}
+}
+function yinjiCount() { return Object.keys(getMeta().endings).length; }
+
 /* ---------- 工具 ---------- */
 const $ = sel => document.querySelector(sel);
 
@@ -42,7 +60,6 @@ function clampStats() {
 }
 
 function checkFates() {
-  // 寿元耗尽 / 心境归零：中途亦可触发结局
   const node = STORY[S.node] || {};
   if (node.ending) return;
   if (S.shouyuan <= 0) { S.node = 'end_shouyuan'; }
@@ -59,7 +76,6 @@ function renderStats() {
   $('#st-xiuwei').textContent = S.xiuwei;
   $('#st-shouyuan').textContent = S.shouyuan;
   $('#st-age').textContent = S.age;
-  // 心境条
   $('#mind-bar').style.width = S.xinjing + '%';
   $('#mind-num').textContent = S.xinjing;
 }
@@ -77,16 +93,6 @@ function notify(msg) {
   }, 2600);
 }
 
-function renderLog() {
-  const box = $('#log-list');
-  box.innerHTML = '';
-  S.log.forEach(item => {
-    const li = document.createElement('li');
-    li.innerHTML = '<span class="log-ch">' + item.chapter + '</span>' + item.text;
-    box.appendChild(li);
-  });
-}
-
 function render() {
   clampStats();
   const node = STORY[S.node];
@@ -95,7 +101,6 @@ function render() {
   const story = $('#story');
   story.innerHTML = '';
 
-  // 章节标记
   if (node.chapter) {
     const ch = document.createElement('div');
     ch.className = 'chapter';
@@ -103,28 +108,27 @@ function render() {
     story.appendChild(ch);
   }
 
-  // 标题
   const h = document.createElement('h2');
   h.className = 'scene-title' + (node.ending ? ' ending-title' : '');
   h.textContent = node.title;
   story.appendChild(h);
 
-  // 正文逐段浮现
-  node.text.forEach((p, i) => {
+  // 正文逐段浮现（空段落跳过）
+  const paras = node.text.map(paraText).filter(t => t && String(t).trim());
+  paras.forEach((t, i) => {
     const el = document.createElement('p');
     el.className = 'para';
-    el.innerHTML = paraText(p).replace(/\n/g, '<br>');
+    el.innerHTML = String(t).replace(/\n/g, '<br>');
     el.style.transitionDelay = (i * 90) + 'ms';
     story.appendChild(el);
     requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('show')));
   });
 
-  // 选项
   const choiceBox = document.createElement('div');
   choiceBox.className = 'choices';
   story.appendChild(choiceBox);
 
-  const delay = node.text.length * 90 + 250;
+  const delay = paras.length * 90 + 250;
   const visible = (node.choices || []).filter(c => !c.show || c.show(S));
 
   visible.forEach((c, i) => {
@@ -136,9 +140,7 @@ function render() {
     btn.style.transitionDelay = (delay + i * 120) + 'ms';
     choiceBox.appendChild(btn);
     requestAnimationFrame(() => requestAnimationFrame(() => btn.classList.add('show')));
-    if (ok) {
-      btn.addEventListener('click', () => choose(c));
-    }
+    if (ok) btn.addEventListener('click', () => choose(c));
   });
 
   renderStats();
@@ -156,16 +158,184 @@ function choose(c) {
   const node = STORY[S.node];
   if (c.fx) c.fx(S);
   S.log.push({ chapter: node.chapter || '', text: c.text.replace(/（[^）]*）/g, '') });
-  const next = typeof c.next === 'function' ? c.next(S) : c.next;
-  S.node = next;
+  S.node = typeof c.next === 'function' ? c.next(S) : c.next;
   const n2 = STORY[S.node];
   if (n2 && n2.onEnter) n2.onEnter(S);
   checkFates();
   clampStats();
   render();
-  // 结局播报
   const nn = STORY[S.node];
-  if (nn && nn.ending) notify('结局 · 「' + (nn.ending) + '」 —— ' + nn.title);
+  if (nn && nn.ending) {
+    recordEnding(nn.ending);
+    notify('结局 · 「' + nn.ending + '」 —— ' + nn.title + ' · 已计入轮回图鉴');
+    return;
+  }
+  // 随机奇遇：进入特定节点时概率触发
+  maybeEvent(S.node);
+}
+
+/* ============================================================
+ * 随机奇遇
+ * ============================================================ */
+let activeEvent = null;
+
+function maybeEvent(nodeId) {
+  const chance = EVENT_TRIGGERS[nodeId];
+  if (!chance) return;
+  if (S.flags.devil) return; // 魔道无奇遇，天道弃子
+  if (Math.random() >= chance) return;
+  const pool = EVENTS.filter(e => !S.eventUsed.includes(e.id));
+  if (!pool.length) return;
+  const ev = pool[Math.floor(Math.random() * pool.length)];
+  S.eventUsed.push(ev.id);
+  activeEvent = ev;
+  save();
+  renderEventModal(ev);
+  notify('奇遇 · 「' + ev.title + '」');
+}
+
+function renderEventModal(ev, resultText) {
+  const modal = $('#event-modal');
+  const body = $('#event-body');
+  body.innerHTML = '';
+
+  const title = document.createElement('h3');
+  title.textContent = '奇遇 · ' + ev.title;
+  body.appendChild(title);
+
+  ev.text.forEach(t => {
+    const p = document.createElement('p');
+    p.className = 'para show';
+    p.textContent = t;
+    body.appendChild(p);
+  });
+
+  if (resultText) {
+    const r = document.createElement('p');
+    r.className = 'para show event-result';
+    r.textContent = resultText;
+    body.appendChild(r);
+    const cont = document.createElement('button');
+    cont.className = 'choice show';
+    cont.innerHTML = '<span class="choice-dot"></span>继续赶路';
+    cont.addEventListener('click', closeEventModal);
+    const box = document.createElement('div');
+    box.className = 'choices';
+    box.style.marginTop = '28px';
+    box.appendChild(cont);
+    body.appendChild(box);
+  } else {
+    const box = document.createElement('div');
+    box.className = 'choices';
+    box.style.marginTop = '28px';
+    ev.choices.forEach(c => {
+      if (c.can && !c.can(S)) return;
+      const btn = document.createElement('button');
+      btn.className = 'choice show';
+      btn.innerHTML = '<span class="choice-dot"></span>' + c.text;
+      btn.addEventListener('click', () => {
+        let result = null;
+        if (c.fx) result = c.fx(S);
+        clampStats();
+        renderStats();
+        save();
+        renderEventModal(ev, result || '你没有多做停留，继续赶路。');
+      });
+      box.appendChild(btn);
+    });
+    body.appendChild(box);
+  }
+
+  modal.classList.add('open');
+}
+
+function closeEventModal() {
+  $('#event-modal').classList.remove('open');
+  activeEvent = null;
+}
+
+/* ============================================================
+ * 命簿面板：前尘 / 善缘 / 图鉴
+ * ============================================================ */
+function renderLog() {
+  const box = $('#log-list');
+  box.innerHTML = '';
+  if (!S.log.length) {
+    box.innerHTML = '<li class="empty-hint">此生尚未做出抉择。</li>';
+    return;
+  }
+  S.log.forEach(item => {
+    const li = document.createElement('li');
+    li.innerHTML = '<span class="log-ch">' + item.chapter + '</span>' + item.text;
+    box.appendChild(li);
+  });
+}
+
+function renderAff() {
+  const box = $('#aff-list');
+  box.innerHTML = '';
+  const order = ['daoLv', 'yunShu', 'qingLing', 'duBiWeng', 'laoYu'];
+  let any = false;
+  order.forEach(key => {
+    const v = S.aff[key] || 0;
+    const known = v !== 0 || (key === 'daoLv' && S.flags.love === '道侣');
+    if (!known && v === 0) return;
+    any = true;
+    const npc = NPCS[key];
+    const row = document.createElement('div');
+    row.className = 'aff-row' + (v < 0 ? ' negative' : '');
+    row.innerHTML =
+      '<div class="aff-head"><span class="aff-name">' + npc.name + '</span>' +
+      '<span class="aff-lv">' + (v < 0 ? '仇怨' : affLevel(v)) + ' · ' + v + '</span></div>' +
+      '<div class="aff-track"><div class="aff-bar" style="width:' + Math.min(100, Math.max(0, v)) + '%"></div></div>' +
+      '<div class="aff-desc">' + npc.desc + '</div>';
+    box.appendChild(row);
+  });
+  if (!any) {
+    box.innerHTML = '<li class="empty-hint">此生还未结下任何善缘。</li>';
+  }
+}
+
+const ENDING_INFO = {
+  '仙': { title: '飞升', desc: '不忘来路，功德圆满，踏天门而去' },
+  '缘': { title: '散仙', desc: '人间有你，何必上天' },
+  '情': { title: '同渡', desc: '青翎替你吞雷，你为它弃了仙籍' },
+  '凡': { title: '兵解', desc: '差一线，就是差一世，来世再来' },
+  '魔': { title: '入魔', desc: '弑天吞雷，长生也是长夜' },
+  '寿': { title: '坐化', desc: '时间是最锋利的刀' },
+  '劫': { title: '心魔', desc: '输给了影子里那个自己' }
+};
+
+function renderCodex() {
+  const box = $('#codex-list');
+  box.innerHTML = '';
+  const meta = getMeta();
+  const yj = document.createElement('div');
+  yj.className = 'yinji-box';
+  yj.innerHTML = '轮回印记 <b>' + Object.keys(meta.endings).length + '</b> 道' +
+    '<span>· 集齐印记可在来世获得修为加持（每道印记 +3 修为 +2 心境）</span>';
+  box.appendChild(yj);
+
+  Object.keys(ENDING_INFO).forEach(rank => {
+    const info = ENDING_INFO[rank];
+    const got = meta.endings[rank] || 0;
+    const row = document.createElement('div');
+    row.className = 'codex-row' + (got ? ' got' : '');
+    row.innerHTML =
+      '<span class="codex-rank">' + rank + '</span>' +
+      '<span class="codex-title">' + info.title + '</span>' +
+      '<span class="codex-desc">' + (got ? info.desc : '？？？') + '</span>' +
+      (got > 1 ? '<span class="codex-count">×' + got + '</span>' : '');
+    box.appendChild(row);
+  });
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-page').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+  if (name === 'log') renderLog();
+  if (name === 'aff') renderAff();
+  if (name === 'codex') renderCodex();
 }
 
 /* ---------- 水墨环境动画 ---------- */
@@ -183,7 +353,6 @@ function startCanvas() {
   resize();
   window.addEventListener('resize', resize);
 
-  // 雾气粒子
   const mists = [];
   for (let i = 0; i < 26; i++) {
     mists.push({
@@ -194,7 +363,6 @@ function startCanvas() {
       o: 0.02 + Math.random() * 0.05
     });
   }
-  // 飘落的花瓣/墨点
   const petals = [];
   for (let i = 0; i < 10; i++) {
     petals.push({
@@ -214,7 +382,6 @@ function startCanvas() {
     ctx.clearRect(0, 0, W, H);
     const ink = inkColor();
 
-    // 三层远山：正弦山脊线
     const layers = [
       { base: 0.82, amp: 26, freq: 0.0022, speed: 0.10, alpha: 0.10, lw: 1 },
       { base: 0.87, amp: 34, freq: 0.0016, speed: 0.16, alpha: 0.13, lw: 1 },
@@ -238,7 +405,6 @@ function startCanvas() {
       ctx.stroke();
     });
 
-    // 雾
     mists.forEach(m => {
       m.x += m.vx; m.y += m.vy;
       if (m.x < -0.2) m.x = 1.2; if (m.x > 1.2) m.x = -0.2;
@@ -250,7 +416,6 @@ function startCanvas() {
       ctx.fillRect(m.x * W - m.r, m.y * H - m.r, m.r * 2, m.r * 2);
     });
 
-    // 花瓣
     petals.forEach(p => {
       p.y += p.vy; p.ph += 0.02;
       if (p.y > 1.05) { p.y = -0.05; p.x = Math.random(); }
@@ -286,22 +451,29 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   $('#restart-btn').addEventListener('click', () => {
-    if (confirm('斩断此生因果，重新入局？')) {
+    if (confirm('斩断此生因果，重新入局？（轮回图鉴与印记将保留）')) {
       clearSave();
       S = freshState();
       render();
     }
   });
 
-  const logPanel = $('#log-panel');
+  const panel = $('#log-panel');
   $('#log-btn').addEventListener('click', () => {
-    renderLog();
-    logPanel.classList.toggle('open');
+    switchTab('log');
+    panel.classList.add('open');
   });
-  $('#log-close').addEventListener('click', () => logPanel.classList.remove('open'));
+  $('#log-close').addEventListener('click', () => panel.classList.remove('open'));
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.addEventListener('click', () => switchTab(b.dataset.tab));
+  });
 
-  // 键盘：1-9 选择
   document.addEventListener('keydown', e => {
+    if ($('#event-modal').classList.contains('open')) return;
+    if (panel.classList.contains('open')) {
+      if (e.key === 'Escape') panel.classList.remove('open');
+      return;
+    }
     const n = parseInt(e.key, 10);
     if (n >= 1 && n <= 9) {
       const btns = document.querySelectorAll('.choice:not(.disabled)');
