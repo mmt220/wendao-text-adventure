@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>问道长生 · 一段修仙文字冒险</title>
+  <meta name="description" content="《问道长生》——纯文字的仙侠文字冒险。灵根、宗门、正魔大战、九九天劫，你的每一个选择都通向不同的结局。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600&family=Noto+Sans+SC:wght@400;500&family=ZCOOL+XiaoWei&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90' font-family='serif'>道</text></svg>">
+</head>
+<body>
+
+  <canvas id="ink" aria-hidden="true"></canvas>
+
+  <header>
+    <div class="header-inner">
+      <div class="brand">
+        问道长生
+        <small>WENDAO · A XIANXIA TEXT ADVENTURE</small>
+      </div>
+      <div class="stats">
+        <span class="stat">境界<b id="st-realm">炼气</b></span>
+        <span class="divider">|</span>
+        <span class="stat">修为<b id="st-xiuwei">0</b></span>
+        <span class="divider">|</span>
+        <span class="stat mind-wrap">心境
+          <span class="mind-track"><span id="mind-bar"></span></span>
+          <b id="mind-num">50</b>
+        </span>
+        <span class="divider">|</span>
+        <span class="stat">寿元<b><span id="st-shouyuan">64</span>年</b></span>
+        <span class="divider">|</span>
+        <span class="stat">年龄<b id="st-age">16</b></span>
+      </div>
+      <div class="hdr-actions">
+        <button class="ghost-btn" id="log-btn" title="回顾此生选择">前尘</button>
+        <button class="ghost-btn" id="night-btn" title="昼夜间切换">夜</button>
+        <button class="ghost-btn" id="restart-btn" title="重新开始">轮回</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div id="story" role="main" aria-live="polite"></div>
+  </main>
+
+  <div id="notify" aria-live="polite"></div>
+
+  <aside id="log-panel" aria-label="前尘记录">
+    <button id="log-close" title="关闭">✕</button>
+    <h3>前尘</h3>
+    <ul id="log-list"></ul>
+  </aside>
+
+  <footer>
+    文字即江湖 · 选择即因果 · 长生不是不死，是不忘
+  </footer>
+
+  <script src="js/story.js"></script>
+  <script src="js/engine.js"></script>
+</body>
+</html>
