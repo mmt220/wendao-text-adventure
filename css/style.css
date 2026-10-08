@@ -377,3 +377,223 @@ footer {
   .stats { gap: 10px; font-size: 11px; }
   .mind-track { width: 44px; }
 }
+
+/* ============================================================
+ * v2 新增：命簿页签 / 善缘 / 图鉴 / 奇遇弹窗
+ * ============================================================ */
+
+/* ---------- 页签 ---------- */
+.tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.tab-btn {
+  flex: 1;
+  font-family: 'Noto Serif SC', serif;
+  font-size: 14px;
+  letter-spacing: 0.25em;
+  padding: 9px 0;
+  background: none;
+  border: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: all 0.3s;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab-btn:hover { color: var(--ink); }
+.tab-btn.active { color: var(--cinnabar); border-bottom-color: var(--cinnabar); }
+
+.tab-page { display: none; }
+.tab-page.active { display: block; }
+
+.empty-hint {
+  list-style: none;
+  font-size: 13px;
+  color: var(--ink-3);
+  padding: 18px 0;
+  letter-spacing: 0.1em;
+}
+
+/* ---------- 善缘（好感度） ---------- */
+.aff-row {
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line);
+}
+.aff-row.negative .aff-name { color: var(--cinnabar); }
+
+.aff-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 7px;
+}
+
+.aff-name {
+  font-family: 'ZCOOL XiaoWei', 'STKaiti', 'KaiTi', serif;
+  font-size: 17px;
+  letter-spacing: 0.15em;
+  color: var(--ink);
+}
+
+.aff-lv {
+  font-family: 'Noto Sans SC', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--cinnabar);
+}
+
+.aff-track {
+  height: 3px;
+  background: var(--line);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 7px;
+}
+
+.aff-bar {
+  height: 100%;
+  background: var(--cinnabar);
+  border-radius: 2px;
+  transition: width 0.5s var(--ease);
+}
+
+.aff-desc {
+  font-size: 12px;
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+  line-height: 1.7;
+}
+
+/* ---------- 图鉴 ---------- */
+.yinji-box {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: var(--ink-85);
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--cinnabar);
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  line-height: 1.9;
+}
+.yinji-box b {
+  font-family: 'ZCOOL XiaoWei', serif;
+  font-size: 20px;
+  color: var(--cinnabar);
+  margin: 0 4px;
+}
+.yinji-box span {
+  display: block;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.codex-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+  opacity: 0.45;
+}
+.codex-row.got { opacity: 1; }
+
+.codex-rank {
+  font-family: 'ZCOOL XiaoWei', 'STKaiti', 'KaiTi', serif;
+  font-size: 18px;
+  color: var(--cinnabar);
+  width: 26px;
+  flex: none;
+}
+.codex-row:not(.got) .codex-rank { color: var(--ink-3); }
+
+.codex-title {
+  font-size: 15px;
+  letter-spacing: 0.1em;
+  color: var(--ink);
+  flex: none;
+}
+.codex-row:not(.got) .codex-title { color: var(--ink-3); }
+
+.codex-desc {
+  font-size: 12px;
+  color: var(--ink-3);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-count {
+  font-size: 11px;
+  color: var(--cinnabar);
+  flex: none;
+}
+
+/* ---------- 奇遇弹窗 ---------- */
+#event-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(10, 10, 10, 0.45);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s var(--ease);
+}
+#event-modal.open { opacity: 1; pointer-events: auto; }
+
+.event-card {
+  position: relative;
+  width: 620px;
+  max-width: 100%;
+  max-height: 84vh;
+  overflow-y: auto;
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+  box-shadow: 8px 8px 0 var(--shadow);
+  padding: 38px 40px 34px;
+  transform: translateY(16px);
+  transition: transform 0.4s var(--ease);
+}
+#event-modal.open .event-card { transform: none; }
+
+.event-tag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-family: 'Noto Sans SC', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.4em;
+  color: var(--paper);
+  background: var(--cinnabar);
+  padding: 4px 12px 4px 16px;
+}
+
+#event-body h3 {
+  font-family: 'ZCOOL XiaoWei', 'STKaiti', 'KaiTi', serif;
+  font-weight: 400;
+  font-size: 26px;
+  letter-spacing: 0.2em;
+  color: var(--ink);
+  margin-bottom: 20px;
+}
+
+#event-body .para { opacity: 1; transform: none; }
+
+.event-result {
+  border-left: 3px solid var(--cinnabar);
+  background: rgba(158, 43, 37, 0.06);
+  padding: 12px 16px;
+  margin-top: 18px;
+}
+
+@media (max-width: 760px) {
+  .event-card { padding: 34px 22px 26px; }
+}
