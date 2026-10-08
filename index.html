@@ -36,7 +36,7 @@
         <span class="stat">年龄<b id="st-age">16</b></span>
       </div>
       <div class="hdr-actions">
-        <button class="ghost-btn" id="log-btn" title="回顾此生选择">前尘</button>
+        <button class="ghost-btn" id="log-btn" title="前尘 · 善缘 · 图鉴">命簿</button>
         <button class="ghost-btn" id="night-btn" title="昼夜间切换">夜</button>
         <button class="ghost-btn" id="restart-btn" title="重新开始">轮回</button>
       </div>
@@ -49,17 +49,32 @@
 
   <div id="notify" aria-live="polite"></div>
 
-  <aside id="log-panel" aria-label="前尘记录">
+  <aside id="log-panel" aria-label="命簿">
     <button id="log-close" title="关闭">✕</button>
-    <h3>前尘</h3>
-    <ul id="log-list"></ul>
+    <h3>命簿</h3>
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="log">前尘</button>
+      <button class="tab-btn" data-tab="aff">善缘</button>
+      <button class="tab-btn" data-tab="codex">图鉴</button>
+    </div>
+    <div class="tab-page active" id="tab-log"><ul id="log-list"></ul></div>
+    <div class="tab-page" id="tab-aff"><div id="aff-list"></div></div>
+    <div class="tab-page" id="tab-codex"><div id="codex-list"></div></div>
   </aside>
+
+  <div id="event-modal" aria-live="polite">
+    <div class="event-card">
+      <div class="event-tag">奇遇</div>
+      <div id="event-body"></div>
+    </div>
+  </div>
 
   <footer>
     文字即江湖 · 选择即因果 · 长生不是不死，是不忘
   </footer>
 
   <script src="js/story.js"></script>
+  <script src="js/events.js"></script>
   <script src="js/engine.js"></script>
 </body>
 </html>
