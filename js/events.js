@@ -20,6 +20,7 @@ const EVENT_TRIGGERS = {
   devil_early:     0.45,
   foundation_road: 0.4,
   core_done:       0.4,
+  auction:         0.35,
   nascent_done:    0.5
 };
 

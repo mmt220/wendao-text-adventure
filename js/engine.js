@@ -1,9 +1,9 @@
 /* ============================================================
- * 《问道长生》引擎 v2
- * 状态 / 渲染 / 存档 / 奇遇 / 好感度 / 轮回图鉴 / 水墨动画
+ * 《问道长生》引擎 v3
+ * 状态 / 渲染 / 存档 / 奇遇 / 好感度 / 立绘 / 轮回图鉴 / 水墨动画
  * ============================================================ */
 
-const SAVE_KEY = 'wendao_save_v2';
+const SAVE_KEY = 'wendao_save_v3';
 const META_KEY = 'wendao_meta';
 
 function freshState() {
@@ -112,6 +112,22 @@ function render() {
   h.className = 'scene-title' + (node.ending ? ' ending-title' : '');
   h.textContent = node.title;
   story.appendChild(h);
+
+  // 立绘（可选）
+  if (node.portrait) {
+    const fig = document.createElement('figure');
+    fig.className = 'portrait';
+    const img = document.createElement('img');
+    img.src = node.portrait;
+    img.alt = node.npc || node.title;
+    fig.appendChild(img);
+    if (node.npc) {
+      const cap = document.createElement('figcaption');
+      cap.textContent = node.npc;
+      fig.appendChild(cap);
+    }
+    story.appendChild(fig);
+  }
 
   // 正文逐段浮现（空段落跳过）
   const paras = node.text.map(paraText).filter(t => t && String(t).trim());
@@ -274,21 +290,26 @@ function renderLog() {
 function renderAff() {
   const box = $('#aff-list');
   box.innerHTML = '';
-  const order = ['daoLv', 'yunShu', 'qingLing', 'duBiWeng', 'laoYu'];
+  const order = ['yunShu', 'acha', 'qingLing', 'duBiWeng', 'laoYu', 'daoLv'];
   let any = false;
   order.forEach(key => {
+    if (key === 'daoLv' && S.flags.loveWho === 'acha') return; // 阿茶行已涵盖道侣
     const v = S.aff[key] || 0;
     const known = v !== 0 || (key === 'daoLv' && S.flags.love === '道侣');
     if (!known && v === 0) return;
     any = true;
     const npc = NPCS[key];
+    let npcName = npc.name;
+    if (key === 'daoLv' && S.flags.loveWho === 'yunshu') npcName = '云姝';
+    const portrait = key === 'daoLv' && S.flags.loveWho === 'yunshu' ? 'assets/portraits/yunshu.jpg' : npc.portrait;
     const row = document.createElement('div');
     row.className = 'aff-row' + (v < 0 ? ' negative' : '');
     row.innerHTML =
-      '<div class="aff-head"><span class="aff-name">' + npc.name + '</span>' +
+      (portrait ? '<img class="aff-avatar" src="' + portrait + '" alt="">' : '') +
+      '<div class="aff-main"><div class="aff-head"><span class="aff-name">' + npcName + '</span>' +
       '<span class="aff-lv">' + (v < 0 ? '仇怨' : affLevel(v)) + ' · ' + v + '</span></div>' +
       '<div class="aff-track"><div class="aff-bar" style="width:' + Math.min(100, Math.max(0, v)) + '%"></div></div>' +
-      '<div class="aff-desc">' + npc.desc + '</div>';
+      '<div class="aff-desc">' + npc.desc + '</div></div>';
     box.appendChild(row);
   });
   if (!any) {
