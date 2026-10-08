@@ -68,14 +68,7 @@ open index.html
 python3 -m http.server 8000   # http://localhost:8000
 ```
 
-> **立绘还原**：受 GitHub 文本上传接口限制，立绘以 base64 形式存放于 `assets/portraits/*.jpg.b64`。
-> clone 后请在项目根目录执行一次：
->
-> ```bash
-> for f in assets/portraits/*.b64; do base64 -d "$f" > "${f%.b64}"; done
-> ```
->
-> 即可还原 6 张 `*.jpg` 立绘（Windows 可用 Git Bash 执行同样的命令）。
+> **关于立绘素材**：6 张水墨立绘（青阳子 / 云姝 / 独臂翁 / 青翎 / 鬼市老妪 / 阿茶）为 AI 生成的二进制图片。受 GitHub 文本上传接口限制，二进制文件暂未能随仓库分发——网页预览版包含完整立绘；直接 clone 运行游戏不受影响（剧情、数值、结局全部完整），仅关键剧情处不显示立绘图片。如需立绘原图，请联系作者获取 `assets/portraits/` 目录。
 
 ## 授权
 
